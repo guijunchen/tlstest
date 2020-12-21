@@ -1,0 +1,173 @@
+//http server
+func (srv *Server) ServeTLS(l net.Listener, certFile, keyFile string) error {
+	// Setup HTTP/2 before srv.Serve, to initialize srv.TLSConfig
+	// before we clone it and create the TLS Listener.
+	if err := srv.setupHTTP2_ServeTLS(); err != nil {
+		return err
+	}
+
+	config := cloneTLSConfig(srv.TLSConfig)
+	if !strSliceContains(config.NextProtos, "http/1.1") {
+		config.NextProtos = append(config.NextProtos, "http/1.1")
+	}
+
+	configHasCert := len(config.Certificates) > 0 || config.GetCertificate != nil
+	if !configHasCert || certFile != "" || keyFile != "" {
+		var err error
+		config.Certificates = make([]tls.Certificate, 1)
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return err
+		}
+		_, ok := cert.PrivateKey.(*sm2.PrivateKey)
+		if ok {
+			fmt.Println("======sm2 cert key ======")
+			//config{Certificates: []tls.Certificate{cert}, GMSupport: &tls.GMSupport{}}
+			config.Certificates[0] = cert
+			config.GMSupport = &tls.GMSupport{}
+		} else {
+			config.Certificates[0] = cert
+		}
+		//config.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return err
+		}
+	}
+
+	tlsListener := tls.NewListener(l, config)
+	return srv.Serve(tlsListener)
+}
+
+//suport gm tls double cert
+func (srv *Server) ServeTLSWithDoubleCert(l net.Listener, signCertFile, signKeyFile, cipherCertFile, cipherKeyFile string) error {
+	// Setup HTTP/2 before srv.Serve, to initialize srv.TLSConfig
+	// before we clone it and create the TLS Listener.
+	if err := srv.setupHTTP2_ServeTLS(); err != nil {
+		return err
+	}
+
+	config := cloneTLSConfig(srv.TLSConfig)
+	if !strSliceContains(config.NextProtos, "http/1.1") {
+		config.NextProtos = append(config.NextProtos, "http/1.1")
+	}
+
+	configHasCert := len(config.Certificates) > 0 || config.GetCertificate != nil
+	if !configHasCert || signCertFile != "" || signKeyFile != "" {
+		var err error
+		config.Certificates = make([]tls.Certificate, 2)
+		//cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		//if err != nil {
+		//	return err
+		//}
+		signCert, err := tls.LoadX509KeyPair(signCertFile, signKeyFile)
+		if err != nil {
+			return err
+		}
+
+		cipherCert, err := tls.LoadX509KeyPair(cipherCertFile, cipherKeyFile)
+		if err != nil {
+			return  err
+		}
+
+		_, ok := signCert.PrivateKey.(*sm2.PrivateKey)
+		if ok {
+			fmt.Println("======sm2 double cert key ======")
+			//config{Certificates: []tls.Certificate{cert}, GMSupport: &tls.GMSupport{}}
+			//tls.Config{Certificates: []tls.Certificate{signCert, cipherCert}, GMSupport: &tls.GMSupport{}}
+			config.Certificates[0] = signCert
+			config.Certificates[1] = cipherCert
+			config.GMSupport = &tls.GMSupport{}
+		} else {
+			config.Certificates[0] = signCert
+			config.Certificates[1] = cipherCert
+		}
+		//config.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return err
+		}
+	}
+
+	tlsListener := tls.NewListener(l, config)
+	return srv.Serve(tlsListener)
+}
+
+
+#######grpc
+// NewServerTLSFromFile constructs TLS credentials from the input certificate file and key
+// file for server.
+func NewServerTLSFromFile(certFile, keyFile string) (TransportCredentials, error) {
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+	_, ok := cert.PrivateKey.(*sm2.PrivateKey)
+	if ok {
+		return NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}, GMSupport: &tls.GMSupport{}}), nil
+	} else {
+		return NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}}), nil
+	}
+}
+
+// NewTLS uses c to construct a TransportCredentials based on TLS.
+func NewTLS(c *tls.Config) TransportCredentials {
+	tc := &tlsCreds{cloneTLSConfig(c)}
+	tc.config.NextProtos = alpnProtoStr
+	if len(c.Certificates) > 0 {
+		_, ok := c.Certificates[0].PrivateKey.(*sm2.PrivateKey)
+		if ok {
+			tc.config.GMSupport = &tls.GMSupport{}
+			// just for test
+			// tc.config.ClientAuth = tls.RequestClientCert
+		}
+	} else {
+		certs := c.RootCAs.GetCerts()
+		if len(certs) > 0 {
+			if _, ok := certs[0].PublicKey.(*sm2.PublicKey); ok {
+				tc.config.GMSupport = &tls.GMSupport{}
+			}
+		}
+	}
+	return tc
+}
+
+//tls https  go 
+https://www.cnblogs.com/embedded-linux/p/12585854.html
+//tls https  go  
+golang里面自定义tls的ciphers 
+https://studygolang.com/articles/19541
+/tls go grpcs  show grpc test tls
+https://studygolang.com/articles/23880
+
+//xieyi
+https://www.jianshu.com/p/1fc7130eb2c2
+//demo from jianshu
+https://cloud.tencent.com/developer/article/1660896
+https://blog.csdn.net/enweitech/article/details/81781405
+https://www.jianshu.com/p/55c1540438f5
+https://studygolang.com/articles/3395
+
+Make CA:
+$ openssl genrsa -out rootCA.key 2048
+$ openssl req -x509 -new -nodes -key rootCA.key -days 1024 -out rootCA.pem
+
+Make cert:
+$ openssl genrsa -out server.key 2048
+$ openssl req -new -key server.key -out server.csr
+$ openssl x509 -req -in server.csr -CA rootCA.pem -CAkey rootCA.key -CAcreateserial -out server.crt -days 500
+
+
+$ openssl genrsa -out client.key 2048
+$ openssl req -new -key client.key -out client.csr
+$ openssl x509 -req -in client.csr -CA rootCA.pem -CAkey rootCA.key -CAcreateserial -out client.crt -days 500
+
+
+
+
+
+
+
+
+
+
+
+
