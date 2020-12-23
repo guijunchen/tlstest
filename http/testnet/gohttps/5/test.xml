@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="GBK"?>
+<union>
+  <head>
+    <serviceCode>E149</serviceCode>
+    <sysID>TE</sysID>
+    <appID>TE</appID>
+            <clientIPAddr>192.1.2.146</clientIPAddr>
+    <transTime>20190116173201</transTime>
+    <transFlag>1</transFlag>
+  </head>
+  <body><keyName>01.03.zpk</keyName>
+	<format>01</format>
+	<accNo>12345678123456781234567812345678</accNo>
+	<phoneNumber>13729001562</phoneNumber>
+	<identityCard>123456781234567</identityCard><pinBlock>69380316882</pinBlock>
+	<hsmGrp>dusk</hsmGrp>
+  </body>
+</union>
