@@ -20,3 +20,6 @@ n
 h
 a
 o
+hello ghost
+word ghost
+word ghost
