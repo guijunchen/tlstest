@@ -2,4 +2,7 @@ hello chen 2
 hello chen 2 2
 hello chen 3
 hello 4
+<<<<<<< HEAD
 hello 5
+=======
+>>>>>>> d044689c0057bdede7aee7eb0bcb35fd6ebf3de2
